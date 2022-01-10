@@ -24,3 +24,5 @@ val digest :
   arch:string ->
   t ->
   (string, [> digest_errors]) result
+
+val pp : Format.formatter -> t -> unit

@@ -85,6 +85,9 @@ let fetch_manifests ~repo ~tag =
       end
   | Error e -> Lwt.return (Error e)
 
+let pp fmt manifests_json =
+  Yojson.Safe.pretty_print fmt manifests_json
+
 let digest ~os ~arch manifests_json =
   match json_get "manifests" manifests_json with
   | Some (`List manifests) ->
