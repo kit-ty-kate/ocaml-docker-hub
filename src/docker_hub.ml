@@ -1,12 +1,18 @@
 (* SPDX-License-Identifier: MIT *)
 
-type errors = [
+type fetch_errors = [
   | `Api_error of Http_lwt_client.response * string option
   | `Malformed_json of string
   | `Msg of string
+]
+
+type digest_errors = [
+  | `Malformed_json of string
   | `No_corresponding_arch_found
   | `No_corresponding_os_found
 ]
+
+type t = Yojson.Safe.t
 
 let fmt = Printf.sprintf
 
@@ -59,31 +65,35 @@ let rec find_manifest ~os ~arch = function
   | [] -> Error (`Malformed_json "empty manifests")
 
 (* OCaml translation of a shell script found here: https://stackoverflow.com/a/37759182 *)
-let fetch_digest ~os ~arch ~repo ~tag =
+let fetch_manifests ~repo ~tag =
   let tag = Option.value tag ~default:"latest" in
   match%lwt get_token ~repo with
   | Ok token ->
+      let api = "application/vnd.docker.distribution.manifest.v2+json" in
+      let apil = "application/vnd.docker.distribution.manifest.list.v2+json" in
       begin match%lwt
-        let api = "application/vnd.docker.distribution.manifest.v2+json" in
-        let apil = "application/vnd.docker.distribution.manifest.list.v2+json" in
         hurl ~meth:`GET
           ~headers:[("Accept", api); ("Accept", apil); ("Authorization", fmt "Bearer %s" token)]
           (fmt "https://registry-1.docker.io/v2/%s/manifests/%s" repo tag)
       with
-      | Ok manifests_json ->
-          let manifests_json = Yojson.Safe.from_string manifests_json in
-          begin match json_get "manifests" manifests_json with
-          | Some (`List manifests) ->
-              begin match find_manifest ~os ~arch manifests with
-              | Ok manifest ->
-                  begin match json_get "digest" manifest with
-                  | Some (`String digest) -> Lwt.return (Ok digest)
-                  | _ -> Lwt.return (Error (`Malformed_json "digest"))
-                  end
-              | Error e -> Lwt.return (Error e)
-              end
-          | _ -> Lwt.return (Error (`Malformed_json "no manifests"))
+      | Ok json ->
+          begin match Yojson.Safe.from_string json with
+          | json -> Lwt.return (Ok json)
+          | exception (Yojson.Json_error msg) -> Lwt.return (Error (`Malformed_json msg))
           end
       | Error e -> Lwt.return (Error e)
       end
   | Error e -> Lwt.return (Error e)
+
+let digest ~os ~arch manifests_json =
+  match json_get "manifests" manifests_json with
+  | Some (`List manifests) ->
+      begin match find_manifest ~os ~arch manifests with
+      | Ok manifest ->
+          begin match json_get "digest" manifest with
+          | Some (`String digest) -> Ok digest
+          | _ -> Error (`Malformed_json "digest")
+          end
+      | Error e -> Error e
+      end
+  | _ -> Error (`Malformed_json "no manifests")

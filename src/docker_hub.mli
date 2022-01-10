@@ -1,16 +1,26 @@
 (* SPDX-License-Identifier: MIT *)
 
-type errors = [
+type fetch_errors = [
   | `Api_error of Http_lwt_client.response * string option
   | `Malformed_json of string
   | `Msg of string
+]
+
+type digest_errors = [
+  | `Malformed_json of string
   | `No_corresponding_arch_found
   | `No_corresponding_os_found
 ]
 
-val fetch_digest :
-  os:string ->
-  arch:string ->
+type t
+
+val fetch_manifests :
   repo:string ->
   tag:string option ->
-  (string, [> errors]) result Lwt.t
+  (t, [> fetch_errors]) result Lwt.t
+
+val digest :
+  os:string ->
+  arch:string ->
+  t ->
+  (string, [> digest_errors]) result
