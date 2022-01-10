@@ -1,0 +1,4 @@
+(library
+ (public_name docker_hub)
+ (preprocess (pps lwt_ppx))
+ (libraries http-lwt-client yojson lwt))
