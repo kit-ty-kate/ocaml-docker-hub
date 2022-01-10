@@ -58,6 +58,7 @@ let rec find_manifest ~os ~arch = function
       end
   | [] -> Error (`Malformed_json "empty manifests")
 
+(* OCaml translation of a shell script found here: https://stackoverflow.com/a/37759182 *)
 let fetch_digest ~os ~arch ~repo ~tag =
   let tag = Option.value tag ~default:"latest" in
   match%lwt get_token ~repo with
