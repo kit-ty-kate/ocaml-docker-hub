@@ -1,4 +1,5 @@
 opam-version: "2.0"
+version: "0.1.0"
 synopsis: "Library aiming to provide data from hub.docker.com"
 maintainer: "Kate <kit.ty.kate@disroot.org>"
 authors: "Kate <kit.ty.kate@disroot.org>"
