@@ -6,6 +6,7 @@ license: "MIT"
 homepage: "https://github.com/kit-ty-kate/ocaml-docker-hub"
 bug-reports: "https://github.com/kit-ty-kate/ocaml-docker-hub/issues"
 dev-repo: "git+https://github.com/kit-ty-kate/opam-docker-hub.git"
+doc: "https://kit-ty-kate.github.io/ocaml-docker-hub/"
 build: ["dune" "build" "-p" name "-j" jobs]
 depends: [
   "ocaml" {>= "4.08"}
