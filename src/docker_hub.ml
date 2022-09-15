@@ -65,6 +65,7 @@ let rec find_manifest ~os ~arch = function
   | [] -> Error (`Malformed_json "empty manifests")
 
 (* OCaml translation of a shell script found here: https://stackoverflow.com/a/37759182 *)
+(* More complete script also available here: https://github.com/moby/moby/blob/924edb948c2731df3b77697a8fcc85da3f6eef57/contrib/download-frozen-image-v2.sh *)
 let fetch_manifests ~repo ~tag =
   (* TODO: Check the repo and tag arguments for invalid characters *)
   (* nameComponentRegexp restricts registry path component names to start
