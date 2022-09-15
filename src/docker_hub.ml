@@ -66,6 +66,16 @@ let rec find_manifest ~os ~arch = function
 
 (* OCaml translation of a shell script found here: https://stackoverflow.com/a/37759182 *)
 let fetch_manifests ~repo ~tag =
+  (* TODO: Check the repo and tag arguments for invalid characters *)
+  (* nameComponentRegexp restricts registry path component names to start
+     with at least one letter or number, with following parts able to be
+     separated by one period, one or two underscore and multiple dashes.
+     Source: https://stackoverflow.com/questions/43091075/docker-restrictions-regarding-naming-image *)
+  let repo = match String.split_on_char '/' repo with
+    | [_; _] -> repo
+    | [_] -> "library/"^repo
+    | _ -> raise (Invalid_argument "Docker_hub.fetch_manifests ~repo")
+  in
   let tag = Option.value tag ~default:"latest" in
   match%lwt get_token ~repo with
   | Ok token ->
