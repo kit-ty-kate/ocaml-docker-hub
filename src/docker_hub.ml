@@ -12,7 +12,7 @@ type digest_errors = [
   | `No_corresponding_os_found
 ]
 
-type t = Yojson.Safe.t
+type t = Yojson.Safe.t list
 
 let fmt = Printf.sprintf
 
@@ -78,25 +78,33 @@ let fetch_manifests ~repo ~tag =
       with
       | Ok json ->
           begin match Yojson.Safe.from_string json with
-          | json -> Lwt.return (Ok json)
+          | json ->
+              begin match json_get "mediaType" json with
+              | Some (`String media_type) ->
+                  if String.equal media_type api then
+                    Lwt.return (Ok [json])
+                  else if String.equal media_type apil then
+                    match json_get "manifests" json with
+                    | Some (`List manifests) -> Lwt.return (Ok manifests)
+                    | _ -> Lwt.return (Error (`Malformed_json "no manifests"))
+                  else
+                    Lwt.return (Error (`Malformed_json "mediaType does not match request"))
+              | _ -> Lwt.return (Error (`Malformed_json "no mediaType"))
+              end
           | exception (Yojson.Json_error msg) -> Lwt.return (Error (`Malformed_json msg))
           end
       | Error e -> Lwt.return (Error e)
       end
   | Error e -> Lwt.return (Error e)
 
-let pp fmt manifests_json =
-  Yojson.Safe.pretty_print fmt manifests_json
+let pp fmt manifests =
+  Yojson.Safe.pretty_print fmt (`List manifests)
 
-let digest ~os ~arch manifests_json =
-  match json_get "manifests" manifests_json with
-  | Some (`List manifests) ->
-      begin match find_manifest ~os ~arch manifests with
-      | Ok manifest ->
-          begin match json_get "digest" manifest with
-          | Some (`String digest) -> Ok digest
-          | _ -> Error (`Malformed_json "digest")
-          end
-      | Error e -> Error e
+let digest ~os ~arch manifests =
+  match find_manifest ~os ~arch manifests with
+  | Ok manifest ->
+      begin match json_get "digest" manifest with
+      | Some (`String digest) -> Ok digest
+      | _ -> Error (`Malformed_json "digest")
       end
-  | _ -> Error (`Malformed_json "no manifests")
+  | Error e -> Error e
