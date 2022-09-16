@@ -111,29 +111,58 @@ module Image = struct
   type tag = {tag : string}
   type digest = {digest : string}
 
+  (* Full format is shown in: https://github.com/distribution/distribution/blob/78b9c98c5c31c30d74f9acb7d96f98552f2cf78f/reference/regexp.go#L101 *)
+  (* TODO: The current implementation is an approximation. Be more strict *)
+
+  let fail ~func_name = raise (Invalid_argument func_name)
+
+  let make_name ~func_name name =
+    let aux = function
+      | 'a'..'z' | '0'..'9' | '.' | '_' | '-' -> true
+      | _ -> false
+    in
+    match String.split_on_char '/' name with
+    | [""; ""] -> fail ~func_name
+    | [x; y] when String.for_all aux x && String.for_all aux y -> {name}
+    | _ -> fail ~func_name
+
+  let make_tag ~func_name tag =
+    let aux = function
+      | 'a'..'z' | 'A'..'Z' | '0'..'9' | '.' | '_' | '-' -> true
+      | _ -> false
+    in
+    match tag with
+    | "" -> fail ~func_name
+    | tag when String.for_all aux tag -> {tag}
+    | _ -> fail ~func_name
+
+  let make_digest ~func_name digest =
+    let aux = function
+      | 'a'..'z' | 'A'..'Z' | '0'..'9' | '.' | '_' | '-' | '+' -> true
+      | _ -> false
+    in
+    match String.split_on_char ':' digest with
+    | [""; ""] -> fail ~func_name
+    | [x; y] when String.for_all aux x && String.for_all aux y -> {digest}
+    | _ -> fail ~func_name
+
   let parse ~func_name image =
-    (* TODO: Check the image argument for invalid characters *)
-    (* nameComponentRegexp restricts registry path component names to start
-       with at least one letter or number, with following parts able to be
-       separated by one period, one or two underscore and multiple dashes.
-       Source: https://stackoverflow.com/questions/43091075/docker-restrictions-regarding-naming-image *)
-    let fail () = raise (Invalid_argument func_name) in
     let parse_name_and_tag image =
       let parse_name image =
         match String.split_on_char '/' image with
-        | [_; _] -> {name = image}
-        | [_] -> {name = "library/"^image}
-        | _ -> fail ()
+        | [_; _] -> make_name ~func_name image
+        | [_] -> make_name ~func_name ("library/"^image)
+        | _ -> fail ~func_name (* TODO: add support for non-docker-hub domains *)
       in
       match String.split_on_char ':' image with
-      | [image; tag] -> (parse_name image, {tag})
-      | [image] -> (parse_name image, {tag = "latest"})
-      | _ -> fail ()
+      | [image; tag] -> (parse_name image, make_tag ~func_name tag)
+      | [image] -> (parse_name image, make_tag ~func_name "latest")
+      | _ -> fail ~func_name
     in
     match String.split_on_char '@' image with
-    | [image; digest] -> (parse_name_and_tag image, Some {digest})
+    | [image; digest] -> (parse_name_and_tag image, Some (make_digest ~func_name digest))
     | [image] -> (parse_name_and_tag image, None)
-    | _ -> fail ()
+    | _ -> fail ~func_name
 
   let with_digest image =
     let func_name = "Docker_hub.Image.with_digest" in
