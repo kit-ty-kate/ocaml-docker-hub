@@ -179,6 +179,14 @@ module Image = struct
   let ignore_digest image =
     let func_name = "Docker_hub.Image.ignore_digest" in
     Stdlib.fst (parse ~func_name image)
+
+  let to_string {name} {tag} = function
+    | None -> fmt "%s:%s" name tag
+    | Some {digest} -> fmt "%s:%s@%s" name tag digest
+
+  let name_to_string {name} = name
+  let tag_to_string {tag} = tag
+  let digest_to_string {digest} = digest
 end
 
 module Token = struct

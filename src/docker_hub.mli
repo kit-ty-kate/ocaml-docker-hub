@@ -22,6 +22,12 @@ module Image : sig
   val with_digest : string -> name * tag * digest
   val without_digest : string -> name * tag
   val ignore_digest : string -> name * tag
+
+  val to_string : name -> tag -> digest option -> string
+
+  val name_to_string : name -> string
+  val tag_to_string : tag -> string
+  val digest_to_string : digest -> string
 end
 
 module Token : sig
