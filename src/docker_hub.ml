@@ -225,6 +225,12 @@ module Manifest = struct
     Json.pp fmt json
 end
 
+let parse_platform json =
+  Json.get_string "os" json >>= fun os ->
+  Json.get_string "architecture" json >>= fun arch ->
+  let variant = Json.get_string_opt "variant" json in
+  Ok {Platform.os; arch; variant}
+
 module Manifests = struct
   type elt = {
     platform : Platform.t;
@@ -239,10 +245,7 @@ module Manifests = struct
   let get_elt json =
     Json.get_string "digest" json >>= fun digest ->
     Json.get "platform" json >>= fun platform ->
-    Json.get_string "os" platform >>= fun os ->
-    Json.get_string "architecture" platform >>= fun arch ->
-    let variant = Json.get_string_opt "variant" platform in
-    let platform = {Platform.os; arch; variant} in
+    parse_platform platform >>= fun platform ->
     Ok {platform; digest = {Image.digest}}
 
   let media_type = "application/vnd.docker.distribution.manifest.list.v2+json"
@@ -272,7 +275,7 @@ module Config = struct
   type t = {
     json : Json.t;
     env : string list;
-    (* TODO: parse .architecture .os .variant *)
+    platform : Platform.t;
   }
 
   let fetch {Manifest.config_digest; _} {Token.token; name; _} =
@@ -285,13 +288,15 @@ module Config = struct
       Lwt.return begin
         Json.parse json >>= fun json ->
         (Json.get "config" json >>= Json.get_string_list "Env") >>= fun env ->
-        Ok {json; env}
+        parse_platform json >>= fun platform ->
+        Ok {json; env; platform}
       end
   | Error e -> Lwt.return (Error e)
 
   let env {env; _} = env
+  let platform {platform; _} = platform
 
-  let pp fmt {json; env = _} =
+  let pp fmt {json; env = _; platform = _} =
     Json.pp fmt json
 end
 

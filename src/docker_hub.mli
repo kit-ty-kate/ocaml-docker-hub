@@ -70,6 +70,7 @@ module Config : sig
     (t, [> fetch_errors]) result Lwt.t
 
   val env : t -> string list
+  val platform : t -> Platform.t
 
   val pp : Format.formatter -> t -> unit
 end
