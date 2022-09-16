@@ -12,6 +12,9 @@ module Platform : sig
     arch : string;
     variant : string option;
   }
+
+  val equal : t -> t -> bool
+  val compare : t -> t -> int
 end
 
 module Image : sig

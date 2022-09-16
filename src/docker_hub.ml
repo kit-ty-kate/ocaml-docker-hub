@@ -12,6 +12,14 @@ type fetch_errors = [
 let fmt = Printf.sprintf
 let ( >>= ) = Result.bind
 
+(* TODO: Export that somewhere? It sounds useful *)
+let rec cmps = function
+  | [] -> 0
+  | f::fl ->
+      match f () with
+      | 0 -> cmps fl
+      | n -> n
+
 let hurl ~meth ~headers url =
   match%lwt
     Http_lwt_client.one_request
@@ -104,6 +112,15 @@ module Platform = struct
     arch : string;
     variant : string option;
   }
+
+  let compare {os; arch; variant} x =
+    cmps [
+      (fun () -> String.compare os x.os);
+      (fun () -> String.compare arch x.arch);
+      (fun () -> Option.compare String.compare variant x.variant);
+    ]
+
+  let equal x y = compare x y = 0
 end
 
 module Image = struct
