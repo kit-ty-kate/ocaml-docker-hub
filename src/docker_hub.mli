@@ -82,7 +82,7 @@ module Config : sig
 end
 
 val fetch_rootfs :
-  output_dir:Fpath.t ->
+  output_file:Fpath.t ->
   Manifest.t ->
   Token.t ->
   (unit, [> fetch_errors]) result Lwt.t

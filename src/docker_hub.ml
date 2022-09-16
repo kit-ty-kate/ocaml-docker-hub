@@ -337,14 +337,14 @@ module Config = struct
     Json.pp fmt json
 end
 
-let fetch_rootfs ~output_dir {Manifest.rootfs_digest; _} {Token.token; name; _} =
+let fetch_rootfs ~output_file {Manifest.rootfs_digest; _} {Token.token; name; _} =
   match%lwt
     hurl ~meth:`GET
       ~headers:[("Accept", Manifest.rootfs_media_type); ("Authorization", fmt "Bearer %s" token)]
       (fmt "https://registry-1.docker.io/v2/%s/blobs/%s" name rootfs_digest)
   with
   | Ok x ->
-      Lwt_io.with_file ~mode:Lwt_io.Output (Fpath.to_string output_dir) begin fun ch ->
+      Lwt_io.with_file ~mode:Lwt_io.Output (Fpath.to_string output_file) begin fun ch ->
         let%lwt () = Lwt_io.write ch x in
         Lwt.return (Ok ())
       end
