@@ -19,6 +19,7 @@ module Image : sig
   type tag
   type digest
 
+  val from_string : string -> name * tag * digest option
   val with_digest : string -> name * tag * digest
   val without_digest : string -> name * tag
   val ignore_digest : string -> name * tag

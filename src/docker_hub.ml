@@ -164,6 +164,11 @@ module Image = struct
     | [image] -> (parse_name_and_tag image, None)
     | _ -> fail ~func_name
 
+  let from_string image =
+    let func_name = "Docker_hub.Image.from_string" in
+    let (name, tag), digest = parse ~func_name image in
+    (name, tag, digest)
+
   let with_digest image =
     let func_name = "Docker_hub.Image.with_digest" in
     match parse ~func_name image with
