@@ -12,7 +12,7 @@ build: ["dune" "build" "-p" name "-j" jobs]
 depends: [
   "ocaml" {>= "4.10"}
   "dune" {>= "2.0"}
-  "http-lwt-client" {>= "0.0.2"}
+  "http-lwt-client" {>= "0.2.0"}
   "lwt"
   "lwt_ppx"
   "yojson" {>= "1.6.0"}

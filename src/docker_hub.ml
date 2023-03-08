@@ -18,11 +18,14 @@ let fmt = Printf.sprintf
 
 let hurl ~meth ~headers url =
   match%lwt
-    Http_lwt_client.one_request
+    Http_lwt_client.request
       ~config:(`HTTP_1_1 Httpaf.Config.default) (* TODO: Remove this when https://github.com/roburio/http-lwt-client/issues/7 is fixed *)
       ~meth
       ~headers
       url
+      (* TODO: This won't work once we handle things that aren't just short and simple JSON *)
+      (fun _ acc body -> Lwt.return (Some (Option.value ~default:"" acc ^ body)))
+      None
   with
   | Ok ({Http_lwt_client.status = `OK; _}, Some body) -> Lwt.return (Ok body)
   | Ok (resp, body) -> Lwt.return (Error (`Api_error (resp, body)))
