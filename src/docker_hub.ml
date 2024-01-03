@@ -11,6 +11,7 @@ type fetch_errors = [
 
 let fmt = Printf.sprintf
 let ( >>= ) = Result.bind
+let ( >|= ) x f = Lwt.map f x
 
 (* TODO: Export that somewhere? It sounds useful *)
 let rec cmps = function
@@ -21,19 +22,18 @@ let rec cmps = function
       | n -> n
 
 let hurl ~meth ~headers url =
-  match%lwt
-    Http_lwt_client.request
-      ~config:(`HTTP_1_1 Httpaf.Config.default) (* TODO: Remove this when https://github.com/roburio/http-lwt-client/issues/7 is fixed *)
-      ~meth
-      ~headers
-      url
-      (* TODO: This won't work once we handle things that aren't just short and simple JSON *)
-      (fun _ acc body -> Lwt.return (Some (Option.value ~default:"" acc ^ body)))
-      None
-  with
-  | Ok ({Http_lwt_client.status = `OK; _}, Some body) -> Lwt.return (Ok body)
-  | Ok (resp, body) -> Lwt.return (Error (`Api_error (resp, body)))
-  | Error e -> Lwt.return (Error e)
+  Http_lwt_client.request
+    ~config:(`HTTP_1_1 Httpaf.Config.default) (* TODO: Remove this when https://github.com/roburio/http-lwt-client/issues/7 is fixed *)
+    ~meth
+    ~headers
+    url
+    (* TODO: This won't work once we handle things that aren't just short and simple JSON *)
+    (fun _ acc body -> Lwt.return (Some (Option.value ~default:"" acc ^ body)))
+    None
+  >|= function
+  | Ok ({Http_lwt_client.status = `OK; _}, Some body) -> Ok body
+  | Ok (resp, body) -> Error (`Api_error (resp, body))
+  | Error e -> Error e
 
 module Json : sig
   type t
@@ -222,18 +222,15 @@ module Token = struct
   }
 
   let fetch {Image.name} =
-    match%lwt
-      hurl ~meth:`GET
-        ~headers:[]
-        (fmt "https://auth.docker.io/token?service=registry.docker.io&scope=repository:%s:pull" name)
-    with
+    hurl ~meth:`GET
+      ~headers:[]
+      (fmt "https://auth.docker.io/token?service=registry.docker.io&scope=repository:%s:pull" name)
+    >|= function
     | Ok json ->
-        Lwt.return begin
-          Json.parse json >>= fun json ->
-          Json.get_string "token" json >>= fun token ->
-          Ok {json; token; name}
-        end
-    | Error e -> Lwt.return (Error e)
+        Json.parse json >>= fun json ->
+        Json.get_string "token" json >>= fun token ->
+        Ok {json; token; name}
+    | Error e -> Error e
 
   let pp fmt {json; token = _; name = _} =
     Json.pp fmt json
@@ -257,31 +254,28 @@ module Manifest = struct
   let rootfs_media_type = "application/vnd.docker.image.rootfs.diff.tar.gzip"
 
   let fetch {Image.digest} {Token.token; name; _} =
-    match%lwt
-      hurl ~meth:`GET
-        ~headers:[("Accept", media_type); ("Authorization", fmt "Bearer %s" token)]
-        (fmt "https://registry-1.docker.io/v2/%s/manifests/%s" name digest)
-    with
+    hurl ~meth:`GET
+      ~headers:[("Accept", media_type); ("Authorization", fmt "Bearer %s" token)]
+      (fmt "https://registry-1.docker.io/v2/%s/manifests/%s" name digest)
+    >|= function
     | Ok json ->
-        Lwt.return begin
-          Json.parse json >>= fun json ->
-          begin
-            Json.get "config" json >>= fun config ->
-            Json.get_string "mediaType" config >>= fun config_media_type' ->
-            check_media_type config_media_type config_media_type' >>= fun () ->
-            Json.get_string "digest" config
-          end >>= fun config_digest ->
-          begin
-            Json.get_list "layers" json >>= function
-            | [] | _::_::_ -> Error (`Msg "Does not support multiple layers yet") (* TODO *)
-            | [layer] ->
-                Json.get_string "mediaType" layer >>= fun rootfs_media_type' ->
-                check_media_type rootfs_media_type rootfs_media_type' >>= fun () ->
-                Json.get_string "digest" layer
-          end >>= fun rootfs_digest ->
-          Ok {json; config_digest; rootfs_digest}
-        end
-    | Error e -> Lwt.return (Error e)
+        Json.parse json >>= fun json ->
+        begin
+          Json.get "config" json >>= fun config ->
+          Json.get_string "mediaType" config >>= fun config_media_type' ->
+          check_media_type config_media_type config_media_type' >>= fun () ->
+          Json.get_string "digest" config
+        end >>= fun config_digest ->
+        begin
+          Json.get_list "layers" json >>= function
+          | [] | _::_::_ -> Error (`Msg "Does not support multiple layers yet") (* TODO *)
+          | [layer] ->
+              Json.get_string "mediaType" layer >>= fun rootfs_media_type' ->
+              check_media_type rootfs_media_type rootfs_media_type' >>= fun () ->
+              Json.get_string "digest" layer
+        end >>= fun rootfs_digest ->
+        Ok {json; config_digest; rootfs_digest}
+    | Error e -> Error e
 
   let pp fmt {json; config_digest = _; rootfs_digest = _} =
     Json.pp fmt json
@@ -313,19 +307,16 @@ module Manifests = struct
   let media_type = "application/vnd.docker.distribution.manifest.list.v2+json"
 
   let fetch {Image.tag} {Token.token; name; _} =
-    match%lwt
-      hurl ~meth:`GET
-        ~headers:[("Accept", media_type); ("Authorization", fmt "Bearer %s" token)]
-        (fmt "https://registry-1.docker.io/v2/%s/manifests/%s" name tag)
-    with
+    hurl ~meth:`GET
+      ~headers:[("Accept", media_type); ("Authorization", fmt "Bearer %s" token)]
+      (fmt "https://registry-1.docker.io/v2/%s/manifests/%s" name tag)
+    >|= function
     | Ok json ->
-        Lwt.return begin
-          Json.parse json >>= fun json ->
-          Json.get_list "manifests" json >>= fun elements ->
-          Json.map get_elt elements >>= fun elements ->
-          Ok {json; elements}
-        end
-    | Error e -> Lwt.return (Error e)
+        Json.parse json >>= fun json ->
+        Json.get_list "manifests" json >>= fun elements ->
+        Json.map get_elt elements >>= fun elements ->
+        Ok {json; elements}
+    | Error e -> Error e
 
   let elements {elements; _} = elements
 
@@ -341,19 +332,16 @@ module Config = struct
   }
 
   let fetch {Manifest.config_digest; _} {Token.token; name; _} =
-    match%lwt
-      hurl ~meth:`GET
-        ~headers:[("Accept", Manifest.config_media_type); ("Authorization", fmt "Bearer %s" token)]
-        (fmt "https://registry-1.docker.io/v2/%s/blobs/%s" name config_digest)
-    with
-  | Ok json ->
-      Lwt.return begin
+    hurl ~meth:`GET
+      ~headers:[("Accept", Manifest.config_media_type); ("Authorization", fmt "Bearer %s" token)]
+      (fmt "https://registry-1.docker.io/v2/%s/blobs/%s" name config_digest)
+    >|= function
+    | Ok json ->
         Json.parse json >>= fun json ->
         (Json.get "config" json >>= Json.get_string_list "Env") >>= fun env ->
         parse_platform json >>= fun platform ->
         Ok {json; env; platform}
-      end
-  | Error e -> Lwt.return (Error e)
+    | Error e -> Error e
 
   let env {env; _} = env
   let platform {platform; _} = platform
@@ -363,14 +351,14 @@ module Config = struct
 end
 
 let fetch_rootfs ~output_file {Manifest.rootfs_digest; _} {Token.token; name; _} =
-  match%lwt
-    hurl ~meth:`GET
-      ~headers:[("Accept", Manifest.rootfs_media_type); ("Authorization", fmt "Bearer %s" token)]
-      (fmt "https://registry-1.docker.io/v2/%s/blobs/%s" name rootfs_digest)
-  with
+  let ( >>= ) = Lwt.bind in
+  hurl ~meth:`GET
+    ~headers:[("Accept", Manifest.rootfs_media_type); ("Authorization", fmt "Bearer %s" token)]
+    (fmt "https://registry-1.docker.io/v2/%s/blobs/%s" name rootfs_digest)
+  >>= function
   | Ok x ->
       Lwt_io.with_file ~mode:Lwt_io.Output (Fpath.to_string output_file) begin fun ch ->
-        let%lwt () = Lwt_io.write ch x in
-        Lwt.return (Ok ())
+        Lwt_io.write ch x >|= fun () ->
+        Ok ()
       end
   | Error e -> Lwt.return (Error e)
