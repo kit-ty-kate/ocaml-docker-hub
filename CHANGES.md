@@ -1,3 +1,9 @@
+v0.2.0 (03/01/2024)
+-------------------
+
+- Large API rework: Add support for fetching single manifests, config, rootfs, ... (#1)
+- Remove the dependency on `lwt_ppx`
+
 v0.1.1 (08/03/2023)
 -------------------
 
