@@ -10,9 +10,11 @@ dev-repo: "git+https://github.com/kit-ty-kate/ocaml-docker-hub.git"
 doc: "https://kit-ty-kate.github.io/ocaml-docker-hub/"
 build: ["dune" "build" "-p" name "-j" jobs]
 depends: [
-  "ocaml" {>= "4.13"}
-  "dune" {>= "2.0"}
-  "http-lwt-client" {>= "0.2.0"}
-  "lwt" {>= "2.0.0"}
+  "ocaml" {>= "5.2.0"}
+  "dune" {>= "3.17.0"}
+  "httpcats" {>= "0.1.0"}
+  "miou" {>= "0.4.0"}
+  "fmt" {>= "0.9.0"}
+  "fpath" {>= "0.7.3"}
   "yojson" {>= "1.6.0"}
 ]

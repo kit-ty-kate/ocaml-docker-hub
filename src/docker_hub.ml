@@ -4,14 +4,13 @@
 (* More complete script also available here: https://github.com/moby/moby/blob/924edb948c2731df3b77697a8fcc85da3f6eef57/contrib/download-frozen-image-v2.sh *)
 
 type fetch_errors = [
-  | `Api_error of Http_lwt_client.response * string option
+  | `Api_error of Httpcats.response * string option
   | `Malformed_json of string
   | `Msg of string
 ]
 
 let fmt = Printf.sprintf
 let ( >>= ) = Result.bind
-let ( >|= ) x f = Lwt.map f x
 
 (* TODO: Export that somewhere? It sounds useful *)
 let rec cmps = function
@@ -22,18 +21,22 @@ let rec cmps = function
       | n -> n
 
 let hurl ~meth ~headers url =
-  Http_lwt_client.request
-    ~config:(`HTTP_1_1 Httpaf.Config.default) (* TODO: Remove this when https://github.com/roburio/http-lwt-client/issues/7 is fixed *)
-    ~meth
-    ~headers
-    url
-    (* TODO: This won't work once we handle things that aren't just short and simple JSON *)
-    (fun _ acc body -> Lwt.return (Some (Option.value ~default:"" acc ^ body)))
-    None
-  >|= function
-  | Ok ({Http_lwt_client.status = `OK; _}, Some body) -> Ok body
+  match
+    Httpcats.request
+      ~meth
+      ~headers
+      ~uri:url
+      (* TODO: This won't work once we handle things that aren't just short and simple JSON *)
+      ~fn:(fun _meta _req _resp acc body -> match acc, body with
+        | None, None -> None
+        | Some x, None
+        | None, Some x -> Some x
+        | Some acc, Some body -> Some (acc ^ body))
+      None
+  with
+  | Ok ({Httpcats.status = `OK; _}, Some body) -> Ok body
   | Ok (resp, body) -> Error (`Api_error (resp, body))
-  | Error e -> Error e
+  | Error e -> Error (`Msg (Fmt.to_to_string Httpcats.pp_error e))
 
 module Json : sig
   type t
@@ -222,10 +225,11 @@ module Token = struct
   }
 
   let fetch {Image.name} =
-    hurl ~meth:`GET
-      ~headers:[]
-      (fmt "https://auth.docker.io/token?service=registry.docker.io&scope=repository:%s:pull" name)
-    >|= function
+    match
+      hurl ~meth:`GET
+        ~headers:[]
+        (fmt "https://auth.docker.io/token?service=registry.docker.io&scope=repository:%s:pull" name)
+    with
     | Ok json ->
         Json.parse json >>= fun json ->
         Json.get_string "token" json >>= fun token ->
@@ -254,10 +258,11 @@ module Manifest = struct
   let rootfs_media_type = "application/vnd.docker.image.rootfs.diff.tar.gzip"
 
   let fetch {Image.digest} {Token.token; name; _} =
-    hurl ~meth:`GET
-      ~headers:[("Accept", media_type); ("Authorization", fmt "Bearer %s" token)]
-      (fmt "https://registry-1.docker.io/v2/%s/manifests/%s" name digest)
-    >|= function
+    match
+      hurl ~meth:`GET
+        ~headers:[("Accept", media_type); ("Authorization", fmt "Bearer %s" token)]
+        (fmt "https://registry-1.docker.io/v2/%s/manifests/%s" name digest)
+    with
     | Ok json ->
         Json.parse json >>= fun json ->
         begin
@@ -307,10 +312,11 @@ module Manifests = struct
   let media_type = "application/vnd.docker.distribution.manifest.list.v2+json"
 
   let fetch {Image.tag} {Token.token; name; _} =
-    hurl ~meth:`GET
-      ~headers:[("Accept", media_type); ("Authorization", fmt "Bearer %s" token)]
-      (fmt "https://registry-1.docker.io/v2/%s/manifests/%s" name tag)
-    >|= function
+    match
+      hurl ~meth:`GET
+        ~headers:[("Accept", media_type); ("Authorization", fmt "Bearer %s" token)]
+        (fmt "https://registry-1.docker.io/v2/%s/manifests/%s" name tag)
+    with
     | Ok json ->
         Json.parse json >>= fun json ->
         Json.get_list "manifests" json >>= fun elements ->
@@ -332,10 +338,11 @@ module Config = struct
   }
 
   let fetch {Manifest.config_digest; _} {Token.token; name; _} =
-    hurl ~meth:`GET
-      ~headers:[("Accept", Manifest.config_media_type); ("Authorization", fmt "Bearer %s" token)]
-      (fmt "https://registry-1.docker.io/v2/%s/blobs/%s" name config_digest)
-    >|= function
+    match
+      hurl ~meth:`GET
+        ~headers:[("Accept", Manifest.config_media_type); ("Authorization", fmt "Bearer %s" token)]
+        (fmt "https://registry-1.docker.io/v2/%s/blobs/%s" name config_digest)
+    with
     | Ok json ->
         Json.parse json >>= fun json ->
         (Json.get "config" json >>= Json.get_string_list "Env") >>= fun env ->
@@ -350,15 +357,19 @@ module Config = struct
     Json.pp fmt json
 end
 
+external reraise : exn -> 'a = "%reraise"
+
 let fetch_rootfs ~output_file {Manifest.rootfs_digest; _} {Token.token; name; _} =
-  let ( >>= ) = Lwt.bind in
-  hurl ~meth:`GET
-    ~headers:[("Accept", Manifest.rootfs_media_type); ("Authorization", fmt "Bearer %s" token)]
-    (fmt "https://registry-1.docker.io/v2/%s/blobs/%s" name rootfs_digest)
-  >>= function
+  match
+    hurl ~meth:`GET
+      ~headers:[("Accept", Manifest.rootfs_media_type); ("Authorization", fmt "Bearer %s" token)]
+      (fmt "https://registry-1.docker.io/v2/%s/blobs/%s" name rootfs_digest)
+  with
   | Ok x ->
-      Lwt_io.with_file ~mode:Lwt_io.Output (Fpath.to_string output_file) begin fun ch ->
-        Lwt_io.write ch x >|= fun () ->
-        Ok ()
-      end
-  | Error e -> Lwt.return (Error e)
+      let fd = Unix.openfile (Fpath.to_string output_file) Unix.[O_WRONLY; O_TRUNC; O_CREAT] 0o666 in
+      let fd = try Miou_unix.of_file_descr fd with e -> Unix.close fd; reraise e in
+      Fun.protect ~finally:(fun () -> Miou_unix.close fd) begin fun () ->
+        Miou_unix.write fd x;
+      end;
+      Ok ()
+  | Error e -> Error e

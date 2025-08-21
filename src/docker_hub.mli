@@ -1,7 +1,7 @@
 (* SPDX-License-Identifier: MIT *)
 
 type fetch_errors = [
-  | `Api_error of Http_lwt_client.response * string option
+  | `Api_error of Httpcats.response * string option
   | `Malformed_json of string
   | `Msg of string
 ]
@@ -37,7 +37,7 @@ end
 module Token : sig
   type t
 
-  val fetch : Image.name -> (t, [> fetch_errors]) result Lwt.t
+  val fetch : Image.name -> (t, [> fetch_errors]) result
 
   val pp : Format.formatter -> t -> unit
 end
@@ -48,7 +48,7 @@ module Manifest : sig
   val fetch :
     Image.digest ->
     Token.t ->
-    (t, [> fetch_errors]) result Lwt.t
+    (t, [> fetch_errors]) result
 
   val pp : Format.formatter -> t -> unit
 end
@@ -64,7 +64,7 @@ module Manifests : sig
   val fetch :
     Image.tag ->
     Token.t ->
-    (t, [> fetch_errors]) result Lwt.t
+    (t, [> fetch_errors]) result
 
   val elements : t -> elt list
 
@@ -77,7 +77,7 @@ module Config : sig
   val fetch :
     Manifest.t ->
     Token.t ->
-    (t, [> fetch_errors]) result Lwt.t
+    (t, [> fetch_errors]) result
 
   val env : t -> string list
   val platform : t -> Platform.t
@@ -89,4 +89,4 @@ val fetch_rootfs :
   output_file:Fpath.t ->
   Manifest.t ->
   Token.t ->
-  (unit, [> fetch_errors]) result Lwt.t
+  (unit, [> fetch_errors]) result
