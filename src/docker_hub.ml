@@ -23,12 +23,11 @@ let rec cmps = function
 let hurl ~meth ~headers url =
   match
     Httpcats.request
-      ~config:(`HTTP_1_1 H1.Config.default) (* TODO: Remove this when https://github.com/roburio/http-lwt-client/issues/7 is fixed *)
       ~meth
       ~headers
       ~uri:url
       (* TODO: This won't work once we handle things that aren't just short and simple JSON *)
-      ~f:(fun _ _ acc body -> match acc, body with
+      ~fn:(fun _meta _req _resp acc body -> match acc, body with
         | None, None -> None
         | Some x, None
         | None, Some x -> Some x
